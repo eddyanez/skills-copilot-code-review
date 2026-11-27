@@ -2,9 +2,11 @@
 Authentication endpoints for the High School Management System API
 """
 
-from fastapi import APIRouter, HTTPException
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 
+from fastapi import APIRouter, Depends, Header, HTTPException
+
+from ..authentication import create_session, get_current_teacher, revoke_session
 from ..database import teachers_collection, verify_password
 
 router = APIRouter(
@@ -28,20 +30,21 @@ def login(username: str, password: str) -> Dict[str, Any]:
     return {
         "username": teacher["username"],
         "display_name": teacher["display_name"],
-        "role": teacher["role"]
+        "role": teacher["role"],
+        "session_token": create_session(teacher["username"])
     }
 
 
 @router.get("/check-session")
-def check_session(username: str) -> Dict[str, Any]:
-    """Check if a session is valid by username"""
-    teacher = teachers_collection.find_one({"_id": username})
+def check_session(
+    teacher: Dict[str, Any] = Depends(get_current_teacher)
+) -> Dict[str, Any]:
+    """Return the teacher associated with a valid session."""
+    return teacher
 
-    if not teacher:
-        raise HTTPException(status_code=404, detail="Teacher not found")
 
-    return {
-        "username": teacher["username"],
-        "display_name": teacher["display_name"],
-        "role": teacher["role"]
-    }
+@router.post("/logout")
+def logout(authorization: Optional[str] = Header(None)) -> Dict[str, str]:
+    """Revoke the current teacher session."""
+    revoke_session(authorization)
+    return {"message": "Logged out"}
